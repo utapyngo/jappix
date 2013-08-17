@@ -17,6 +17,20 @@ function handleMessage(message) {
 	if(handleErrorReply(message))
 		return;
 	
+	// MAM-forwarded message?
+	var c_mam = message.getChild('result', NS_URN_MAM);
+
+	if(c_mam) {
+		var c_mam_delay = $(c_mam).find('delay[xmlns="' + NS_URN_DELAY + '"]');
+		var c_mam_forward = $(c_mam).find('forwarded[xmlns="' + NS_URN_FORWARD + '"]');
+
+		if(c_mam_forward.size()) {
+			handleMessageMAM(c_mam_forward, c_mam_delay);
+		}
+
+		return;
+	}
+
 	// We get the message items
 	var from = fullXID(getStanzaFrom(message));
 	var id = message.getID();
@@ -43,25 +57,17 @@ function handleMessage(message) {
 	}
 	
 	// Get message date
-	var time, stamp, d_stamp;
-	
-	// Read the delay
+	var time, stamp;
 	var delay = readMessageDelay(node);
 	
 	// Any delay?
 	if(delay) {
 		time = relativeDate(delay);
-		d_stamp = Date.jab2date(delay);
-	}
-	
-	// No delay: get actual time
-	else {
+		stamp = extractStamp(Date.jab2date(delay));
+	} else {
 		time = getCompleteTime();
-		d_stamp = new Date();
+		stamp = extractStamp(new Date());
 	}
-	
-	// Get the date stamp
-	stamp = extractStamp(d_stamp);
 	
 	// Received message
 	if(hasReceived(message))
@@ -112,7 +118,7 @@ function handleMessage(message) {
 		}
 	}
 	
-	// Request message
+	// Jappix App message
 	if(message.getChild('app', 'jappix:app')) {
 		// Get notification data
 		var jappix_app_node = $(node).find('app[xmlns="jappix:app"]');
@@ -887,13 +893,19 @@ function generateMessage(aMsg, body, hash) {
 }
 
 // Displays a given message in a chat tab
-function displayMessage(type, xid, hash, name, body, time, stamp, message_type, html_escape, nick_quote, mode, id) {
+function displayMessage(type, xid, hash, name, body, time, stamp, message_type, html_escape, nick_quote, mode, id, c_target_sel, no_scroll) {
+	// Target
+	if(typeof c_target_sel === 'undefined') {
+		c_target_sel = $('#' + hash + ' .content');
+	}
+
 	// Generate some stuffs
 	var has_avatar = false;
 	var xid_hash = '';
 	
-	if(!nick_quote)
+	if(!nick_quote) {
 		nick_quote = '';
+	}
 	
 	if(message_type != 'system-message') {
 		has_avatar = true;
@@ -904,105 +916,109 @@ function displayMessage(type, xid, hash, name, body, time, stamp, message_type, 
 	var cont_scroll = document.getElementById('chat-content-' + hash);
 	var can_scroll = false;
 	
-	if(!cont_scroll.scrollTop || ((cont_scroll.clientHeight + cont_scroll.scrollTop) == cont_scroll.scrollHeight))
+	if((!cont_scroll.scrollTop || ((cont_scroll.clientHeight + cont_scroll.scrollTop) == cont_scroll.scrollHeight)) && no_scroll != true) {
 		can_scroll = true;
+	}
 	
 	// Any ID?
 	var data_id = '';
 	
-	if(id)
+	if(id) {
 		data_id = ' data-id="' + id + '"';
+	}
 	
 	// Filter the message
 	var filteredMessage = filterThisMessage(body, name, html_escape);
-	
+
 	// Display the received message in the room
-	var messageCode = '<div class="one-line ' + message_type + nick_quote + '"' + data_id + '>';
+	var messageCode = '<div class="one-line ' + message_type + nick_quote + '" data-stamp="' + stamp + '"' + data_id + '>';
 	
 	// Name color attribute
-	if(type == 'groupchat')
+	if(type == 'groupchat') {
 		attribute = ' style="color: ' + generateColor(name) + ';" class="name';
-	else {
+	} else {
 		attribute = ' class="name';
 		
-		if(mode)
+		if(mode) {
 			attribute += ' ' + mode;
+		}
 	}
 	
 	// Close the class attribute
-	if(message_type == 'system-message')
+	if(message_type == 'system-message') {
 		attribute += ' hidden"';
-	else
+	} else {
 		attribute += '"';
+	}
 	
 	// Filter the previous displayed message
-	var last = $('#' + hash + ' .one-group:not(.from-history):last');
+	var last = c_target_sel.find('.one-group:not(.from-history):last');
 	var last_name = last.find('b.name').attr('data-xid');
 	var last_type = last.attr('data-type');
 	var last_stamp = parseInt(last.attr('data-stamp'));
 	var grouped = false;
 	
 	// We can group it with another previous message
-	if((last_name == xid) && (message_type == last_type) && ((stamp - last_stamp) <= 1800))
+	if((last_name == xid) && (message_type == last_type) && ((stamp - last_stamp) <= 1800)) {
 		grouped = true;
+	}
 	
 	// Is it a /me command?
-	if(body.match(/(^|>)(\/me )([^<]+)/))
+	if(body.match(/(^|>)(\/me )([^<]+)/)) {
 		filteredMessage = '<i>' + filteredMessage + '</i>';
+	}
 	
 	messageCode += filteredMessage + '</div>';
 	
 	// Must group it?
-	var group_path = ' .one-group:last';
-	
 	if(!grouped) {
 		// Generate message headers
 		var message_head = '';
 		
 		// Any avatar to add?
-		if(has_avatar)
+		if(has_avatar) {
 			message_head += '<div class="avatar-container"><img class="avatar" src="' + './img/others/default-avatar.png' + '" alt="" /></div>';
+		}
 		
 		// Add the date & the name
 		message_head += '<span class="date">' + time + '</span><b data-xid="' + encodeQuotes(xid) + '" ' + attribute + '>' + name + '</b>';
 		
 		// Generate message code
-		group_path = '';
 		messageCode = '<div class="one-group ' + xid_hash + '" data-type="' + message_type + '" data-stamp="' + stamp + '">' + message_head + messageCode + '</div>';
 	}
-	
-	// Archive message
-	if(hash == 'archives')
-		$('#archives .logs' + group_path).append(messageCode);
-	
-	// Instant message
-	else {
-		// Write the code in the DOM
-		$('#' + hash + ' .content' + group_path).append(messageCode);
+
+	// Write the code in the DOM
+	if(grouped) {
+		c_target_sel.find('.one-group:last').append(messageCode);
+	} else {
+		c_target_sel.append(messageCode);
+	}
+
+	// Store the last MAM_REQ_MAX message groups
+	if(!enabledMAM() && (type == 'chat') && (message_type == 'user-message')) {
+		// Filter the DOM
+		var dom_filter = $('#' + hash + ' .content').clone().contents();
+		var default_avatar = ('./img/others/default-avatar.png').replace(/&amp;/g, '&'); // Fixes #252
 		
-		// Store the last 20 message groups
-		if((type == 'chat') && (message_type == 'user-message')) {
-			// Filter the DOM
-			var dom_filter = $('#' + hash + ' .content').clone().contents();
-			var default_avatar = ('./img/others/default-avatar.png').replace(/&amp;/g, '&'); // Fixes #252
-			
-			$(dom_filter).find('.system-message').parent().remove();
-			$(dom_filter).find('.avatar-container img.avatar').attr('src', default_avatar);
-			$(dom_filter).find('.one-line').parent().slice(0, $(dom_filter).find('.one-line').parent().size() - 20).remove();
-			
-			var store_html = $(dom_filter).parent().html();
-			
-			// Store the data
-			if(store_html)
-				setPersistent(getXID(), 'history', hash, store_html);
+		$(dom_filter).find('.system-message').parent().remove();
+		$(dom_filter).find('.avatar-container img.avatar').attr('src', default_avatar);
+		$(dom_filter).find('.one-line').parent().slice(0, $(dom_filter).find('.one-line').parent().size() - MAM_REQ_MAX).remove();
+		
+		var store_html = $(dom_filter).parent().html();
+		
+		// Store the data
+		if(store_html) {
+			setPersistent(getXID(), 'history', hash, store_html);
 		}
-		
-		// Must get the avatar?
-		if(has_avatar && xid)
-			getAvatar(xid, 'cache', 'true', 'forget');
+	}
+	
+	// Must get the avatar?
+	if(has_avatar && xid && !grouped) {
+		getAvatar(xid, 'cache', 'true', 'forget');
 	}
 	
 	// Scroll to this message
-	if(can_scroll)
+	if(can_scroll) {
 		autoScroll(hash);
+	}
 }

@@ -30,7 +30,7 @@ function getAvatar(xid, mode, enabled, photo) {
 		forced = true;
 	
 	// No avatar in presence
-	if(!photo && !forced && (enabled == 'true')) {
+	if(!photo && !forced && enabled == 'true') {
 		// Pending marker
 		AVATAR_PENDING.push(xid);
 		
@@ -47,13 +47,13 @@ function getAvatar(xid, mode, enabled, photo) {
 		var binval = $(xml).find('binval').text();
 		var checksum = $(xml).find('checksum').text();
 		var updated = false;
-		
+
 		// Process the checksum of the avatar
-		if((checksum == photo) || (photo == 'forget') || forced)
+		if(checksum == photo || photo == 'forget' || forced)
 			updated = true;
-		
+
 		// If the avatar is yet stored and a new retrieving is not needed
-		if((mode == 'cache') && type && binval && checksum && updated) {
+		if(mode == 'cache' && type && binval && checksum && updated) {
 			// Pending marker
 			AVATAR_PENDING.push(xid);
 			
@@ -64,7 +64,7 @@ function getAvatar(xid, mode, enabled, photo) {
 		}
 		
 		// Else if the request has not yet been fired, we get it
-		else if((!updated || (mode == 'cache' && !updated) || (mode == 'force') || (photo = 'forget')) && (enabled != 'false')) {
+		else if((!updated || mode == 'force' || photo == 'forget') && enabled != 'false') {
 			// Pending marker
 			AVATAR_PENDING.push(xid);
 			

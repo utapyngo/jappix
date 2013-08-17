@@ -7,7 +7,7 @@ These are the chat JS scripts for Jappix
 
 License: AGPL
 Authors: Valérian Saliou, Eric, Maranda
-Last revision: 20/02/13
+Last revision: 16/08/13
 
 */
 
@@ -80,7 +80,7 @@ function generateChat(type, id, xid, nick) {
 	var escaped_xid = escape(xid);
 	
 	// Special code
-	var specialAttributes, specialAvatar, specialName, specialCode, specialLink, specialDisabled, specialStyle;
+	var specialAttributes, specialAvatar, specialName, specialCode, specialLink, specialDisabled, specialStyle, specialMAM;
 	
 	// Groupchat special code
 	if(type == 'groupchat') {
@@ -100,11 +100,12 @@ function generateChat(type, id, xid, nick) {
 	
 	// Chat (or other things?!) special code
 	else {
+		specialMAM = '<div class="wait-mam wait-small"></div>';
 		specialAttributes = ' data-type="chat"';
 		specialAvatar = '<div class="avatar-container"><img class="avatar" src="' + './img/others/default-avatar.png' + '" alt="" /></div>';
 		specialName = '<div class="bc-pep"></div><p class="bc-infos"><span class="unavailable show talk-images"></span></p>';
-		specialCode = '<div class="content" id="chat-content-' + id + '"></div>';
-		specialLink = '<a href="#" class="tools-archives tools-tooltip talk-images chat-tools-content" title="' + _e("View chat history") + '"></a><a href="#" class="tools-infos tools-tooltip talk-images chat-tools-content" title="' + _e("Show user profile") + '"></a>';
+		specialCode = '<div class="content" id="chat-content-' + id + '">' + specialMAM + '</div>';
+		specialLink = '<a href="#" class="tools-infos tools-tooltip talk-images chat-tools-content" title="' + _e("Show user profile") + '"></a>';
 		specialStyle = ' style="display: none;"';
 		specialDisabled = '';
 	}
@@ -242,38 +243,48 @@ function chatCreate(hash, xid, nick, type) {
 	
 	// If the user is not in our buddy-list
 	if(type == 'chat') {
-		// Restore the chat history
-		var chat_history = getPersistent(getXID(), 'history', hash);
-		
-		if(chat_history) {
-			// Generate hashs
-			var my_hash = hex_md5(getXID());
-			var friend_hash = hex_md5(xid);
-			
-			// Add chat history HTML
-			$('#' + hash + ' .content').append(chat_history);
-			
-			// Filter old groups & messages
-			$('#' + hash + ' .one-group[data-type="user-message"]').addClass('from-history').attr('data-type', 'old-message');
-			$('#' + hash + ' .user-message').removeClass('user-message').addClass('old-message');
-			
-			// Regenerate user names
-			$('#' + hash + ' .one-group.' + my_hash + ' b.name').text(getBuddyName(getXID()));
-			$('#' + hash + ' .one-group.' + friend_hash + ' b.name').text(getBuddyName(xid));
-			
-			// Regenerate group dates
-			$('#' + hash + ' .one-group').each(function() {
-				var current_stamp = parseInt($(this).attr('data-stamp'));
-				$(this).find('span.date').text(relativeDate(current_stamp));
+		// MAM? Get archives from there!
+		if(enabledMAM()) {
+			getArchivesMAM({
+				'with': xid
+			}, {
+				'max': MAM_REQ_MAX,
+				'before': ''
 			});
+		} else {
+			// Restore the chat history
+			var chat_history = getPersistent(getXID(), 'history', hash);
 			
-			// Regenerate avatars
-			if(exists('#' + hash + ' .one-group.' + my_hash + ' .avatar-container'))
-				getAvatar(getXID(), 'cache', 'true', 'forget');
-			if(exists('#' + hash + ' .one-group.' + friend_hash + ' .avatar-container'))
-				getAvatar(xid, 'cache', 'true', 'forget');
+			if(chat_history) {
+				// Generate hashs
+				var my_hash = hex_md5(getXID());
+				var friend_hash = hex_md5(xid);
+				
+				// Add chat history HTML
+				$('#' + hash + ' .content').append(chat_history);
+				
+				// Filter old groups & messages
+				$('#' + hash + ' .one-group[data-type="user-message"]').addClass('from-history').attr('data-type', 'old-message');
+				$('#' + hash + ' .user-message').removeClass('user-message').addClass('old-message');
+				
+				// Regenerate user names
+				$('#' + hash + ' .one-group.' + my_hash + ' b.name').text(getBuddyName(getXID()));
+				$('#' + hash + ' .one-group.' + friend_hash + ' b.name').text(getBuddyName(xid));
+				
+				// Regenerate group dates
+				$('#' + hash + ' .one-group').each(function() {
+					var current_stamp = parseInt($(this).attr('data-stamp'));
+					$(this).find('span.date').text(relativeDate(current_stamp));
+				});
+				
+				// Regenerate avatars
+				if(exists('#' + hash + ' .one-group.' + my_hash + ' .avatar-container'))
+					getAvatar(getXID(), 'cache', 'true', 'forget');
+				if(exists('#' + hash + ' .one-group.' + friend_hash + ' .avatar-container'))
+					getAvatar(xid, 'cache', 'true', 'forget');
+			}
 		}
-		
+
 		// Add button
 		if(!exists('#buddy-list .buddy[data-xid="' + escape(xid) + '"]'))
 			$('#' + hash + ' .tools-add').click(function() {
@@ -282,17 +293,6 @@ function chatCreate(hash, xid, nick, type) {
 				
 				// Send the subscribe request
 				addThisContact(xid, nick);
-			}).show();
-		
-		// Archives button
-		else if(enabledArchives() || enabledArchives('auto') || enabledArchives('manual') || enabledArchives('manage'))
-			$('#' + hash + ' .tools-archives').click(function() {
-				// Open the archives popup
-				openArchives();
-				
-				// Get the archives for this user
-				$('#archives .filter .friend').val(xid);
-				updateArchives();
 			}).show();
 	}
 	
@@ -336,6 +336,45 @@ function chatCreate(hash, xid, nick, type) {
 			}
 			
 			return false;
+		}
+	});
+
+	// Scroll in chat content
+	$('#page-engine #' + hash + ' .content').scroll(function() {
+		var self = this;
+
+		if(enabledMAM() && !(xid in MAM_MAP_PENDING)) {
+			var has_state = xid in MAM_MAP_STATES;
+			var rsm_count = has_state ? MAM_MAP_STATES[xid]['rsm']['count'] : 1;
+			var rsm_before = has_state ? MAM_MAP_STATES[xid]['rsm']['first'] : '';
+
+			// Request more archives?
+			if(rsm_count > 0 && $(this).scrollTop() < MAM_SCROLL_THRESHOLD) {
+				var was_scroll_top = $(self).scrollTop() <= 32;
+				var wait_mam = $('#' + hash).find('.wait-mam');
+				wait_mam.show();
+
+				getArchivesMAM({
+					'with': xid
+				}, {
+					'max': MAM_REQ_MAX,
+					'before': rsm_before
+				}, function() {
+					var wait_mam_height = was_scroll_top ? 0 : wait_mam.height();
+					wait_mam.hide();
+
+					// Restore scroll?
+					if($(self).scrollTop() < MAM_SCROLL_THRESHOLD) {
+						var sel_mam_chunk = $(self).find('.mam-chunk:first');
+
+						var cont_padding_top = parseInt($(self).css('padding-top').replace(/[^-\d\.]/g, ''));
+						var cont_one_group_margin_bottom = parseInt(sel_mam_chunk.find('.one-group:last').css('margin-bottom').replace(/[^-\d\.]/g, ''));
+						var cont_mam_chunk_height = sel_mam_chunk.height();
+
+						$(self).scrollTop(wait_mam_height + cont_padding_top + cont_one_group_margin_bottom + cont_mam_chunk_height);
+					}
+				});
+			}
 		}
 	});
 	

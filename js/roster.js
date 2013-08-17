@@ -316,7 +316,7 @@ function applyBuddyInput(xid) {
 		closeBubbles();
 		
 		// Update privacy settings
-		pushPrivacy('block', ['jid'], [xid], ['allow'], ['1'], [false], [true], [true], [true], '', 'roster');
+		pushPrivacy('block', ['jid'], [xid], ['allow'], [false], [true], [true], [true], '', 'roster');
 		$(path).removeClass('blocked');
 		
 		// Enable the "block" list
@@ -353,7 +353,7 @@ function applyBuddyInput(xid) {
 		closeBubbles();
 		
 		// Update privacy settings
-		pushPrivacy('block', ['jid'], [xid], ['deny'], ['1'], [false], [true], [true], [true], '', 'roster');
+		pushPrivacy('block', ['jid'], [xid], ['deny'], [false], [true], [true], [true], '', 'roster');
 		$(path).addClass('blocked');
 		
 		// Enable the "block" list
@@ -364,13 +364,13 @@ function applyBuddyInput(xid) {
 		sendPresence(xid, 'unavailable');
 		
 		// Remove the user presence
-		for(var i = 0; i < sessionStorage.length; i++) {
+		for(var i = 0; i < storageDB.length; i++) {
 			// Get the pointer values
-			var current = sessionStorage.key(i);
+			var current = storageDB.key(i);
 			
 			// If the pointer is on a stored presence
 			if((explodeThis('_', current, 0) == 'presence') && (bareXID(explodeThis('_', current, 1)) == xid))
-				sessionStorage.removeItem(current);
+				storageDB.removeItem(current);
 		}
 		
 		// Manage his new presence
@@ -863,7 +863,7 @@ function launchRoster() {
 					xid = generateXID(xid, 'chat');
 				
 				// Submit the form
-				if(xid && (xid != getXID()))
+				if(xid && getXIDNick(xid) && (xid != getXID()))
 					addThisContact(xid, name);
 				else
 					$(document).oneTime(10, function() {
@@ -1074,10 +1074,6 @@ function launchRoster() {
 						'<a href="#" class="buddy-conf-more-display-available">' + _e("Only show connected friends") +  '</a>' + 
 					'</p>' + 
 					
-					'<p class="buddy-conf-text archives-hidable">' + 
-						'- <a href="#" class="buddy-conf-more-archives">' + _e("Message archives") +  '</a>' + 
-					'</p>' + 
-					
 					'<p class="buddy-conf-text privacy-hidable">' + 
 						'- <a href="#" class="buddy-conf-more-privacy">' + _e("Privacy") +  '</a>' + 
 					'</p>' + 
@@ -1112,9 +1108,6 @@ function launchRoster() {
 			return false;
 		});
 		
-		// When the user click on the archives link
-		$('.buddy-conf-more-archives').click(openArchives);
-		
 		// When the user click on the privacy link
 		$('.buddy-conf-more-privacy').click(openPrivacy);
 		
@@ -1133,9 +1126,6 @@ function launchRoster() {
 			$('.buddy-conf-more-display-unavailable').hide();
 			$('.buddy-conf-more-display-available').show();
 		}
-		
-		if(enabledArchives() || enabledArchives('auto') || enabledArchives('manual') || enabledArchives('manage'))
-			$('.buddy-conf-more-archives').parent().show();
 		
 		if(enabledCommands())
 			$('.buddy-conf-more-commands').parent().show();

@@ -54,10 +54,10 @@ function openWelcome() {
 				'<span class="tick talk-images"></span>' + 
 			'</a>' + 
 			
-			'<a href="#" class="box enabled archives-hidable pref" title="' + _e("Click to enable") + '">' + 
+			'<a href="#" class="box mam-hidable pref" title="' + _e("Click to enable") + '">' + 
 				'<span class="option">' + _e("Message archiving") + '</span>' + 
 				'<span class="description">' + _e("Store a history of your chats") + '</span>' + 
-				'<span class="image archives talk-images"></span>' + 
+				'<span class="image mam talk-images"></span>' + 
 				'<span class="tick talk-images"></span>' + 
 			'</a>' + 
 			
@@ -232,15 +232,11 @@ function saveWelcome() {
 		showAllBuddies('welcome');
 	
 	// If archiving is supported by the server
-	if(enabledArchives('pref')) {
-		var aEnabled = false;
-		
+	if(enabledMAM()) {
 		// If archiving is enabled
-		if(array[3] == '1')
-			aEnabled = true;
-		
-		// Send the archives configuration
-		configArchives(aEnabled);
+		if(array[3] == '1') {
+			setConfigMAM('roster');
+		}
 	}
 	
 	// Send the new options

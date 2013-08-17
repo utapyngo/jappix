@@ -152,9 +152,9 @@ function quitThisChat(xid, hash, type) {
 		sendPresence(xid + '/' + getMUCNick(hash), 'unavailable');
 		
 		// Remove all presence database entries for this groupchat
-		for(var i = 0; i < sessionStorage.length; i++) {
+		for(var i = 0; i < storageDB.length; i++) {
 			// Get the pointer values
-			var current = sessionStorage.key(i);
+			var current = storageDB.key(i);
 			var cXID = explodeThis('_', current, 1);
 			
 			// If the pointer is on a presence from this groupchat
@@ -166,14 +166,19 @@ function quitThisChat(xid, hash, type) {
 				$('#' + cHash + ' .message-area').attr('disabled', true);
 				
 				// Remove the presence for this XID
-				removeDB('presence', cXID);
+				removeDB('presence-stanza', cXID);
+				removeDB('presence-resources', cXID);
 				presenceFunnel(cXID, cHash);
 			}
 		}
-	}
-	
-	else
+	} else {
 		chatStateSend('gone', xid, hash);
+	}
+
+	// Clear MAM storage for this chat
+	if(xid in MAM_MAP_STATES) {
+		delete MAM_MAP_STATES[xid];
+	}
 	
 	// Get the chat ID which is before
 	var previous = $('#' + hash).prev().attr('id');
@@ -182,8 +187,9 @@ function quitThisChat(xid, hash, type) {
 	deleteThisChat(hash);
 	
 	// Reset the switcher
-	if(!exists('#page-switch .switcher.activechan'))
+	if(!exists('#page-switch .switcher.activechan')) {
 		switchChan(previous);
+	}
 	
 	// Reset the notifications
 	chanCleanNotify(hash);

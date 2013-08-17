@@ -34,10 +34,14 @@ function optionsOpen() {
 				'</div>' +
 				
 				'<div class="archiving">' +
-					'<label for="archiving" class="archives-hidable pref">' + _e("Message archiving") + '</label>' + 
-					'<input id="archiving" type="checkbox" class="archives-hidable pref" />' + 
+					'<label for="archiving" class="mam-hidable">' + _e("Message archiving") + '</label>' + 
+					'<select id="archiving" class="mam-hidable">' + 
+						'<option value="never">' + _e("Disabled") + '</option>' + 
+						'<option value="roster">' + _e("Store friend chats") + '</option>' + 
+						'<option value="always">' + _e("Store all chats") + '</option>' + 
+					'</select>' + 
+					'<a href="#" class="linked empty-archives mam-hidable">' + _e("Remove all archives") + '</a>' + 
 				'</div>' +
-				
 			'</fieldset>' + 
 			
 			'<fieldset class="application">' + 
@@ -62,8 +66,21 @@ function optionsOpen() {
 					'<label class="xmpplinks-hidable">' + _e("XMPP links") + '</label>' + 
 					'<a href="#" class="linked xmpp-links xmpplinks-hidable">' + _e("Open XMPP links with Jappix") + '</a>' + 
 				'</div>' +
-				
 			'</fieldset>' + 
+
+			'<div class="sub-ask sub-ask-mam sub-ask-element">' + 
+				'<div class="sub-ask-top">' + 
+					'<div class="sub-ask-title">' + _e("Remove all archives") + '</div>' + 
+					'<a href="#" class="sub-ask-close">X</a>' + 
+				'</div>' + 
+				
+				'<div class="sub-ask-content">' + 
+					'<label>' + _e("Password") + '</label>' + 
+					'<input type="password" class="purge-archives check-mam" required="" />' + 
+				'</div>' + 
+				
+				'<a href="#" class="sub-ask-bottom">' + _e("Remove") + ' &raquo;</a>' + 
+			'</div>' + 
 		'</div>' + 
 		
 		'<div id="conf2" class="one-lap forms">' + 
@@ -207,7 +224,7 @@ function waitOptions(id) {
 	sOptions.removeClass(id);
 	
 	// Hide the waiting items if all was received
-	if(!sOptions.hasClass('microblog') && !sOptions.hasClass('archives')) {
+	if(!sOptions.hasClass('microblog') && !sOptions.hasClass('mam')) {
 		$('#options .wait').hide();
 		$('#options .finish:first').removeClass('disabled');
 	}
@@ -296,13 +313,8 @@ function saveOptions() {
 	setDB('options', 'integratemedias', integratemedias);
 	
 	// We apply the message archiving
-	if(enabledArchives('pref')) {
-		var aEnabled = false;
-		
-		if($('#archiving').filter(':checked').size())
-			aEnabled = true;
-		
-		configArchives(aEnabled);
+	if(enabledMAM()) {
+		setConfigMAM($('#archiving').val() || 'never');
 	}
 	
 	// We apply the microblog configuration
@@ -368,9 +380,7 @@ function sendNewPassword() {
 		con.send(iq, handlePwdChange);
 		
 		logThis('Password change sent.', 3);
-	}
-	
-	else {
+	} else {
 		$('.sub-ask-pass input').each(function() {
 			var select = $(this);
 			
@@ -408,10 +418,35 @@ function handleAccDeletion(iq) {
 		logout();
 		
 		logThis('Account deleted.', 3);
+	} else {
+		logThis('Account not deleted.', 2);
+	}
+}
+
+// Purge the user's archives (MAM)
+function purgeMyArchives() {
+	var password = $('#options .check-mam').val();
+	
+	if(password == getPassword()) {
+		purgeArchivesMAM();
+
+		// Clear archives in UI
+		$('.page-engine-chan[data-type="chat"] .tools-clear').click();
+
+		// Hide the tool
+		$('#options .sub-ask').hide();
+	} else {
+		var selector = $('#options .check-mam');
+		
+		if(password != getPassword())
+			$(document).oneTime(10, function() {
+				selector.addClass('please-complete').focus();
+			});
+		else
+			selector.removeClass('please-complete');
 	}
 	
-	else
-		logThis('Account not deleted.', 2);
+	return false;
 }
 
 // Purge the user's microblog items
@@ -434,9 +469,7 @@ function purgeMyMicroblog() {
 		$('#options .sub-ask').hide();
 		
 		logThis('Microblog purge sent.', 3);
-	}
-	
-	else {
+	} else {
 		var selector = $('#options .check-empty');
 		
 		if(password != getPassword())
@@ -503,22 +536,22 @@ function deleteMyAccount() {
 // Loads the user options
 function loadOptions() {
 	// Process the good stuffs, depending of the server features
-	var enabled_archives_pref = enabledArchives('pref');
+	var enabled_mam = enabledMAM();
 	var enabled_pubsub = enabledPubSub();
 	var enabled_pubsub_cn = enabledPubSubCN();
 	var enabled_pep = enabledPEP();
 	var sWait = $('#options .content');
 	
 	// Show the waiting items if necessary
-	if(enabled_archives_pref || (enabled_pep && (enabled_pubsub || enabled_pubsub_cn))) {
+	if(enabled_mam || (enabled_pep && (enabled_pubsub || enabled_pubsub_cn))) {
 		$('#options .wait').show();
 		$('#options .finish:first').addClass('disabled');
 	}
 	
 	// We get the archiving configuration
-	if(enabled_archives_pref) {
-		sWait.addClass('archives');
-		getConfigArchives();
+	if(enabled_mam) {
+		sWait.addClass('mam');
+		getConfigMAM();
 	}
 	
 	// We get the microblog configuration
@@ -528,7 +561,7 @@ function loadOptions() {
 	}
 	
 	// We show the "privacy" form if something is visible into it
-	if(enabled_archives_pref || enabled_pep)
+	if(enabled_mam || enabled_pep)
 		$('#options fieldset.privacy').show();
 	
 	// We get the values of the forms for the sounds
@@ -579,6 +612,18 @@ function launchOptions() {
 		
 		return false;
 	});
+
+	$('#options .empty-archives').click(function() {
+		var selector = '#options .sub-ask-mam';
+		
+		$(selector).show();
+		
+		$(document).oneTime(10, function() {
+			$(selector + ' input').focus();
+		});
+		
+		return false;
+	});
 	
 	$('#options .empty-channel').click(function() {
 		var selector = '#options .sub-ask-empty';
@@ -620,6 +665,10 @@ function launchOptions() {
 		return sendNewPassword();
 	});
 	
+	$('#options .sub-ask-mam .sub-ask-bottom').click(function() {
+		return purgeMyArchives();
+	});
+
 	$('#options .sub-ask-empty .sub-ask-bottom').click(function() {
 		return purgeMyMicroblog();
 	});
@@ -646,8 +695,12 @@ function launchOptions() {
 	// The keyup events
 	$('#options .sub-ask input').keyup(function(e) {
 		if(e.keyCode == 13) {
+			// Archives purge
+			if($(this).is('.purge-archives'))
+				return purgeMyArchives();
+
 			// Microblog purge
-			if($(this).is('.purge-microblog'))
+			else if($(this).is('.purge-microblog'))
 				return purgeMyMicroblog();
 			
 			// Password change
